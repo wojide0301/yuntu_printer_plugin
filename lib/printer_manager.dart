@@ -347,7 +347,6 @@ class PrinterManager {
         // Non-Windows USB printer discovery
         final devices = await YuntuPrinterPluginPlatform.instance
             .startUsbScan();
-
         final usbPrinters = <Printer>[];
         for (final map in devices) {
           final printer = Printer(
@@ -365,7 +364,7 @@ class PrinterManager {
               .isConnected(printer);
           usbPrinters.add(printer.copyWith(isConnected: isConnected));
         }
-
+        log('USB Printers: ${usbPrinters.map((e) => e.toJson()).toList()}');
         for (final printer in usbPrinters) {
           _updateOrAddPrinter(printer);
         }
@@ -375,6 +374,7 @@ class PrinterManager {
             event,
           ) {
             final map = Map<String, dynamic>.from(event);
+            log('USB Printer Item: ${map}');
             if (event['detached'] != null && event['detached'] == true) {
               _removePrinter(
                 Printer(
@@ -389,20 +389,21 @@ class PrinterManager {
                   deviceName: map['deviceName'].toString(),
                 ),
               );
+            } else {
+              _updateOrAddPrinter(
+                Printer(
+                  vendorId: map['vendorId'].toString(),
+                  productId: map['productId'].toString(),
+                  name: map['name'],
+                  connectionType: ConnectionType.USB,
+                  address: map['vendorId'].toString(),
+                  isConnected: map['connected'] ?? false,
+                  deviceName: map['deviceName']?.toString(),
+                  manufacturer: map['manufacturer']?.toString(),
+                  serialNumber: map['serialNumber']?.toString(),
+                ),
+              );
             }
-            _updateOrAddPrinter(
-              Printer(
-                vendorId: map['vendorId'].toString(),
-                productId: map['productId'].toString(),
-                name: map['name'],
-                connectionType: ConnectionType.USB,
-                address: map['vendorId'].toString(),
-                isConnected: map['connected'] ?? false,
-                deviceName: map['deviceName']?.toString(),
-                manufacturer: map['manufacturer']?.toString(),
-                serialNumber: map['serialNumber']?.toString(),
-              ),
-            );
           });
         } else {
           await _usbSubscription?.cancel();
@@ -436,7 +437,6 @@ class PrinterManager {
             sortDevices();
           });
         }
-
         sortDevices();
       }
     } catch (e) {
@@ -530,9 +530,11 @@ class PrinterManager {
       (device) => _isPrinterEqual(printer, device),
     );
     if (index == -1) {
+      log("Printer added: ${printer.toJson()}");
       _devices.add(printer);
     } else {
       _devices[index] = printer;
+      log("Printer updated: ${printer.toJson()}");
     }
     if (printer.connectionType == ConnectionType.BLE &&
         (printer.address?.isNotEmpty ?? false)) {
@@ -711,6 +713,7 @@ class PrinterManager {
         return true; // Keep
       }
     });
+    log("devices after sorting: ${_devices.length}");
     _devicesStream.add(_devices);
   }
 

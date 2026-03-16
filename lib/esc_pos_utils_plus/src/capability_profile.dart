@@ -22,7 +22,8 @@ class CapabilityProfile {
     /// else do nothing
     if (printCapabilities.isEmpty == true) {
       final content = await rootBundle.loadString(
-        path ?? 'packages/esc_pos_utils_plus/resources/capabilities.json',
+        path ??
+            'packages/yuntu_printer_plugin/esc_pos_utils_plus/resources/capabilities.json',
       );
       var capabilities = json.decode(content);
       printCapabilities = Map.from(capabilities);
