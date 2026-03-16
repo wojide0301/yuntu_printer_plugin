@@ -46,6 +46,10 @@ class YuntuPrinterPlugin {
     connectionStabilizationDelay: connectionStabilizationDelay,
   );
 
+  void clear() {
+    PrinterManager.instance.clear();
+  }
+
   /// Disconnect from a printer device
   Future<void> disconnect(Printer device) async {
     await PrinterManager.instance.disconnect(device);

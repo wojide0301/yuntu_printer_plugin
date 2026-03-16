@@ -744,4 +744,8 @@ class PrinterManager {
       return false;
     }
   }
+
+  void clear() {
+    _devices.clear();
+  }
 }
