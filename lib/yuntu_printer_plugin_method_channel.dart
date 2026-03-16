@@ -36,6 +36,10 @@ class MethodChannelYuntuPrinterPlugin extends YuntuPrinterPluginPlatform {
     "serialNumber": device.serialNumber,
   });
 
+ @override
+  Future<dynamic> startUsbScan() async =>
+      methodChannel.invokeMethod('getUsbDevicesList');
+
   @override
   Future<bool> isConnected(Printer device) async =>
       await methodChannel.invokeMethod('isConnected', device.toJson());
