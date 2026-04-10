@@ -126,47 +126,24 @@ class YuntuPrinterPlugin {
     double? devicePixelRatio,
   }) async {
     final controller = ScreenshotController();
+    final image = await controller.captureFromLongWidget(
+      widget,
+      pixelRatio: devicePixelRatio ?? View.of(context).devicePixelRatio,
+      delay: delay,
+    );
+    img.Image? imagebytes = img.decodeImage(image);
+    imagebytes = _buildImageRasterAvaliable(imagebytes!);
+    imagebytes = img.grayscale(imagebytes);
+    return Uint8List.fromList(img.encodePng(imagebytes));
+  }
 
-    try {
-      final image = await controller.captureFromLongWidget(
-        widget,
-        pixelRatio: devicePixelRatio ?? View.of(context).devicePixelRatio,
-        delay: delay,
-      );
-
-      final profile = await CapabilityProfile.load();
-      final generator0 = generator ?? Generator(paperSize, profile);
-
-      var imagebytes = img.decodeImage(image);
-      if (imagebytes == null) {
-        throw Exception('Failed to decode captured image');
-      }
-
-      // Apply custom width if specified
-      if (customWidth != null) {
-        ///
-        /// [context] The build context.
-        /// [printer] The printer to print to.
-        /// [widget] The widget to print.
-        /// [delay] Delay before capturing the screenshot.
-        /// [paperSize] The paper size of the printer.
-        /// [profile] Optional capability profile.
-        /// [printOnBle] Whether to print on BLE (deprecated/unused parameter?).
-        /// [cutAfterPrinted] Whether to cut the paper after printing.
-        /// [chunkSize] The size of chunks for data transmission.
-        final width = _makeDivisibleBy8(customWidth);
-        imagebytes = img.copyResize(imagebytes, width: width);
-      }
-
-      // Ensure image width is compatible with thermal printers
-      imagebytes = _buildImageRasterAvailable(imagebytes);
-      imagebytes = img.grayscale(imagebytes);
-
-      // Process image in optimized chunks
-      return _processImageInChunks(imagebytes, generator0);
-    } catch (e) {
-      throw Exception('Failed to capture widget screenshot: $e');
+  img.Image _buildImageRasterAvaliable(img.Image image) {
+    final avaliable = image.width % 8 == 0;
+    if (avaliable) {
+      return image;
     }
+    final newWidth = _makeDivisibleBy8(image.width);
+    return img.copyResize(image, width: newWidth);
   }
 
   /// Optimized widget printing with better resource management
