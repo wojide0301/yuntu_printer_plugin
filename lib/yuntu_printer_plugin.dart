@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:yuntu_printer_plugin/printer_manager.dart';
-import 'package:yuntu_printer_plugin/utils/ble_config.dart';
 import 'package:yuntu_printer_plugin/utils/printer.dart';
 import 'package:image/image.dart' as img;
 
@@ -12,12 +11,9 @@ import 'esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'yuntu_printer_plugin_platform_interface.dart';
 
 class YuntuPrinterPlugin {
-  YuntuPrinterPlugin._({BleConfig bleConfig = const BleConfig()})
-    : _bleConfig = bleConfig;
+  YuntuPrinterPlugin._();
 
-  BleConfig _bleConfig;
-
-  BleConfig get bleConfig => _bleConfig;
+  factory YuntuPrinterPlugin() => instance;
 
   static YuntuPrinterPlugin? _instance;
 
@@ -34,10 +30,6 @@ class YuntuPrinterPlugin {
       PrinterManager.instance.devicesStream;
 
   /// Connect to a printer device
-  ///
-  /// [device] The printer device to connect to.
-  /// [connectionStabilizationDelay] Optional delay to wait after connection is established
-  /// before considering it stable. Defaults to [BleConfig.connectionStabilizationDelay].
   Future<bool> connect(
     Printer device, {
     Duration? connectionStabilizationDelay,
@@ -56,11 +48,6 @@ class YuntuPrinterPlugin {
   }
 
   /// Print raw data to printer
-  ///
-  /// [device] The printer device to print to.
-  /// [bytes] The raw bytes to print.
-  /// [longData] Whether the data is long and should be split into chunks.
-  /// [chunkSize] The size of each chunk if [longData] is true.
   Future<void> printData(
     Printer device,
     List<int> bytes, {
@@ -69,11 +56,6 @@ class YuntuPrinterPlugin {
   }) async => PrinterManager.instance.printData(
     device,
     bytes,
-
-    ///
-    /// [refreshDuration] The duration between each scan refresh.
-    /// [connectionTypes] List of connection types to scan for (BLE, USB).
-    /// [androidUsesFineLocation] Whether to use fine location on Android for BLE scanning.
     longData: longData,
     chunkSize: chunkSize,
   );
@@ -81,10 +63,7 @@ class YuntuPrinterPlugin {
   /// Get available printers
   Future<void> getPrinters({
     Duration refreshDuration = const Duration(seconds: 2),
-    List<ConnectionType> connectionTypes = const [
-      ConnectionType.USB,
-      ConnectionType.BLE,
-    ],
+    List<ConnectionType> connectionTypes = const [ConnectionType.USB],
     bool androidUsesFineLocation = false,
   }) async {
     await PrinterManager.instance.getPrinters(
@@ -98,22 +77,6 @@ class YuntuPrinterPlugin {
   Future<void> stopScan() async {
     await PrinterManager.instance.stopScan();
   }
-
-  /// Turn on Bluetooth
-  Future<void> turnOnBluetooth() async {
-    await PrinterManager.instance.turnOnBluetooth();
-  }
-
-  ///
-  /// [context] The build context.
-  /// [widget] The widget to capture.
-  /// [delay] Delay before capturing the screenshot.
-  /// [customWidth] Optional custom width for the image.
-  /// [paperSize] The paper size of the printer.
-  /// [generator] Optional ESC/POS generator.
-
-  /// Check if Bluetooth is turned on
-  Future<bool> isBleTurnedOn() async => PrinterManager.instance.isBleTurnedOn();
 
   /// Optimized screen capture and conversion to printer-ready bytes
   Future<Uint8List> screenShotWidget(
@@ -179,39 +142,6 @@ class YuntuPrinterPlugin {
     } catch (e) {
       throw Exception('Failed to print widget: $e');
     }
-  }
-
-  /// Process image in optimized chunks for better memory management
-  /// Skip chunking for macOS platform
-  Uint8List _processImageInChunks(img.Image image, Generator generator) {
-    // For other platforms, use chunked approach
-    const chunkHeight = 30;
-    final totalHeight = image.height;
-    final totalWidth = image.width;
-    final chunksCount = (totalHeight / chunkHeight).ceil();
-
-    final bytes = <int>[];
-
-    for (var i = 0; i < chunksCount; i++) {
-      final startY = i * chunkHeight;
-      final endY = (startY + chunkHeight > totalHeight)
-          ? totalHeight
-          : startY + chunkHeight;
-      final actualHeight = endY - startY;
-
-      final croppedImage = img.copyCrop(
-        image,
-        x: 0,
-        y: startY,
-        width: totalWidth,
-        height: actualHeight,
-      );
-
-      final raster = generator.imageRaster(croppedImage);
-      bytes.addAll(raster);
-    }
-
-    return Uint8List.fromList(bytes);
   }
 
   /// Ensure image width is compatible with thermal printers (divisible by 8)
