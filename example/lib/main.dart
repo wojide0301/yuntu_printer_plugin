@@ -17,7 +17,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
-  final _yuntuPrinterPlugin = YuntuPrinterPlugin();
+  final _yuntuPrinterPlugin = YuntuPrinterPlugin.instance;
 
   @override
   void initState() {
@@ -32,7 +32,8 @@ class _MyAppState extends State<MyApp> {
     // We also handle the message potentially returning null.
     try {
       platformVersion =
-          await _yuntuPrinterPlugin.getPlatformVersion() ?? 'Unknown platform version';
+          await _yuntuPrinterPlugin.getPlatformVersion() ??
+          'Unknown platform version';
     } on PlatformException {
       platformVersion = 'Failed to get platform version.';
     }

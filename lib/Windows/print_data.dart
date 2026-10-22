@@ -36,28 +36,31 @@ class RawPrinter {
         if (StartPagePrinter(printerHandle) == 0) {
           throw StateError('StartPagePrinter failed: ${GetLastError()}');
         }
-        try {
-          final buffer = alloc<Uint8>(data.length);
-          buffer.asTypedList(data.length).setAll(0, data);
-          final bytesWritten = alloc<DWORD>();
-          var offset = 0;
-          while (offset < data.length) {
-            final result = WritePrinter(
-              printerHandle,
-              buffer + offset,
-              data.length - offset,
-              bytesWritten,
-            );
-            if (result == 0 || bytesWritten.value == 0) {
-              throw StateError('WritePrinter failed: ${GetLastError()}');
-            }
-            offset += bytesWritten.value;
+        final buffer = alloc<Uint8>(data.length);
+        buffer.asTypedList(data.length).setAll(0, data);
+        final bytesWritten = alloc<DWORD>();
+        var offset = 0;
+        while (offset < data.length) {
+          final result = WritePrinter(
+            printerHandle,
+            buffer + offset,
+            data.length - offset,
+            bytesWritten,
+          );
+          if (result == 0 || bytesWritten.value == 0) {
+            throw StateError('WritePrinter failed: ${GetLastError()}');
           }
-        } finally {
-          EndPagePrinter(printerHandle);
+          offset += bytesWritten.value;
         }
-      } finally {
-        EndDocPrinter(printerHandle);
+        if (EndPagePrinter(printerHandle) == 0) {
+          throw StateError('EndPagePrinter failed: ${GetLastError()}');
+        }
+        if (EndDocPrinter(printerHandle) == 0) {
+          throw StateError('EndDocPrinter failed: ${GetLastError()}');
+        }
+      } catch (_) {
+        AbortPrinter(printerHandle);
+        rethrow;
       }
     } finally {
       ClosePrinter(printerHandle);
