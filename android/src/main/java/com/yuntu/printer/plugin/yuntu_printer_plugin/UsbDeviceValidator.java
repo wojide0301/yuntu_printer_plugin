@@ -14,7 +14,12 @@ public class UsbDeviceValidator {
             return false;
         }
         
-        return device.getInterface(0).getInterfaceClass() == UsbConstants.USB_CLASS_PRINTER;
+        for (int i = 0; i < device.getInterfaceCount(); i++) {
+            if (device.getInterface(i).getInterfaceClass() == UsbConstants.USB_CLASS_PRINTER) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**

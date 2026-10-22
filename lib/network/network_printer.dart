@@ -58,16 +58,14 @@ class FlutterThermalPrinterNetwork {
       _socket!.add(data);
       await _socket!.flush();
 
-      if (isDisconnect) {
-        await disconnect();
-      }
-
       return NetworkPrintResult.success;
     } on SocketException {
       _isConnected = false;
       return NetworkPrintResult.timeout;
     } catch (e) {
       return NetworkPrintResult.timeout;
+    } finally {
+      if (isDisconnect) await disconnect();
     }
   }
 

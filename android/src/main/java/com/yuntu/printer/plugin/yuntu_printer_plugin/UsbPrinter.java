@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import io.flutter.plugin.common.EventChannel;
+import io.flutter.plugin.common.MethodChannel.Result;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -134,7 +135,7 @@ public class UsbPrinter implements EventChannel.StreamHandler {
         HashMap<String, Object> deviceData = new HashMap<>();
         deviceData.put("name", device.getProductName());
         try {
-            deviceData.put("serialNumber", String.valueOf(device.getSerialNumber()));
+            deviceData.put("serialNumber", device.getSerialNumber());
         } catch (SecurityException e) {
             deviceData.put("serialNumber", null);
         }
@@ -188,10 +189,22 @@ public class UsbPrinter implements EventChannel.StreamHandler {
     }
 
     //    Print text on the printer
-    public void printText(String serialNumber, List<Integer> bytes) {
-        UsbDevice printerDevice = findUsbDeviceBySerial(serialNumber);
+    public void printText(String serialNumber, String vendorId, String productId,
+                          String deviceName, List<Integer> bytes, Result result) {
+        UsbDevice printerDevice = permissionManager.findUsbDevice(vendorId, productId, deviceName);
+        if (printerDevice == null && serialNumber != null && !serialNumber.equals("null")) {
+            printerDevice = findUsbDeviceBySerial(serialNumber);
+        }
         if(printerDevice == null){
-            Log.e(TAG, "Printer device not found for serial: " + serialNumber);
+            result.error("PRINTER_NOT_FOUND", "USB printer not found", null);
+            return;
+        }
+        if (!permissionManager.isDeviceHasPermission(printerDevice)) {
+            result.error("USB_PERMISSION_DENIED", "USB printer permission not granted", null);
+            return;
+        }
+        if (bytes == null || bytes.isEmpty()) {
+            result.error("INVALID_PRINT_DATA", "Print data is empty", null);
             return;
         }
 
@@ -201,7 +214,7 @@ public class UsbPrinter implements EventChannel.StreamHandler {
             int end = Math.min(bytes.size(), i + UsbConnectionManager.getMaxChunkSize());
             batches.add(bytes.subList(i, end));
         }
-        connectionManager.submitPrintExecutor(printerDevice, batches);
+        connectionManager.submitPrintExecutor(printerDevice, batches, result);
     }
 
     

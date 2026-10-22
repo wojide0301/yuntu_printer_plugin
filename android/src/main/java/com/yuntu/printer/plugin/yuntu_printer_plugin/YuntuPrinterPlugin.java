@@ -62,9 +62,11 @@ public class YuntuPrinterPlugin implements FlutterPlugin, MethodCallHandler {
       }
       case "printText": {
         String serialNumber = call.argument("serialNumber");
+        String vendorId = call.argument("vendorId");
+        String productId = call.argument("productId");
+        String deviceName = call.argument("deviceName");
         List<Integer> data = call.argument("data");
-        usbPrinter.printText(serialNumber, data);
-        result.success(true);
+        usbPrinter.printText(serialNumber, vendorId, productId, deviceName, data, result);
         break;
       }
       case "isConnected": {
