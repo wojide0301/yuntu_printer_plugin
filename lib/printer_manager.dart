@@ -237,6 +237,7 @@ class PrinterManager {
           );
         } catch (e) {
           log('FlutterThermalPrinter: Unable to Print Data $e');
+          rethrow;
         }
       }
     } else if (printer.connectionType == ConnectionType.BLE) {
@@ -516,7 +517,8 @@ class PrinterManager {
   }
 
   bool _isPrinterEqual(Printer a, Printer b) {
-    if (a.serialNumber != null && b.serialNumber != null) {
+    if (a.serialNumber?.isNotEmpty == true && a.serialNumber != 'null' &&
+        b.serialNumber?.isNotEmpty == true && b.serialNumber != 'null') {
       return a.serialNumber == b.serialNumber;
     }
     return a.vendorId == b.vendorId &&

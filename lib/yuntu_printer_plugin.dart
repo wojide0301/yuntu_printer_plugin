@@ -11,6 +11,8 @@ import 'package:image/image.dart' as img;
 import 'esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'yuntu_printer_plugin_platform_interface.dart';
 
+export 'tspl/tspl_generator.dart';
+
 class YuntuPrinterPlugin {
   YuntuPrinterPlugin._({BleConfig bleConfig = const BleConfig()})
     : _bleConfig = bleConfig;

@@ -30,6 +30,7 @@ class MethodChannelYuntuPrinterPlugin extends YuntuPrinterPluginPlatform {
   }) async => await methodChannel.invokeMethod('printText', {
     'vendorId': device.vendorId.toString(),
     'productId': device.productId.toString(),
+    'deviceName': device.deviceName,
     'name': device.name,
     'data': List<int>.from(data),
     'path': path ?? '',

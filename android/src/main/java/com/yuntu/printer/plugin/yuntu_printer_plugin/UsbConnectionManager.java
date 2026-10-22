@@ -7,6 +7,9 @@ import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
 import android.util.Log;
+import android.os.Handler;
+import android.os.Looper;
+import io.flutter.plugin.common.MethodChannel.Result;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +33,7 @@ public class UsbConnectionManager {
     private final Map<String, PrinterConnection> connectionPool;
     private final ExecutorService printExecutor;
     private final ScheduledExecutorService cleanupExecutor;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     
     public UsbConnectionManager(UsbManager usbManager, UsbPermissionManager permissionManager) {
         this.usbManager = usbManager;
@@ -42,7 +46,7 @@ public class UsbConnectionManager {
                 3, // 最大线程数
                 60L, TimeUnit.SECONDS, // 空闲线程存活时间
                 new LinkedBlockingQueue<Runnable>(MAX_QUEUE_SIZE), // 有界队列
-                new ThreadPoolExecutor.DiscardPolicy() // 队列满时丢弃新任务
+                new ThreadPoolExecutor.AbortPolicy()
         );
         
         this.cleanupExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -55,8 +59,8 @@ public class UsbConnectionManager {
         UsbDeviceConnection connection;
         UsbInterface usbInterface;
         UsbEndpoint bulkEndpoint;
-        long lastUsed;
-        boolean isValid;
+        volatile long lastUsed;
+        volatile boolean isValid;
         final String deviceKey;
         
         PrinterConnection(String deviceKey) {
@@ -129,16 +133,19 @@ public class UsbConnectionManager {
      */
     public void closeConnection(PrinterConnection conn) {
         if (conn != null) {
-            try {
-                if (conn.connection != null) {
-                    if (conn.usbInterface != null) {
-                        conn.connection.releaseInterface(conn.usbInterface);
+            synchronized (conn) {
+                conn.isValid = false;
+                try {
+                    if (conn.connection != null) {
+                        if (conn.usbInterface != null) {
+                            conn.connection.releaseInterface(conn.usbInterface);
+                        }
+                        conn.connection.close();
                     }
-                    conn.connection.close();
+                    Log.d(TAG, "USB connection closed: " + (conn.deviceKey != null ? conn.deviceKey : "unknown"));
+                } catch (Exception e) {
+                    Log.e(TAG, "Error closing USB connection: " + e.getMessage());
                 }
-                Log.d(TAG, "USB connection closed: " + (conn.deviceKey != null ? conn.deviceKey : "unknown"));
-            } catch (Exception e) {
-                Log.e(TAG, "Error closing USB connection: " + e.getMessage());
             }
         }
     }
@@ -146,7 +153,7 @@ public class UsbConnectionManager {
     /**
      * 获取或创建连接
      */
-    public PrinterConnection getOrCreateConnection(UsbDevice device) {
+    public synchronized PrinterConnection getOrCreateConnection(UsbDevice device) {
         String deviceKey = permissionManager.getDeviceKey(device);
         PrinterConnection conn = connectionPool.get(deviceKey);
         
@@ -184,7 +191,18 @@ public class UsbConnectionManager {
                 return null;
             }
             
-            conn.usbInterface = device.getInterface(0);
+            for (int i = 0; i < device.getInterfaceCount(); i++) {
+                UsbInterface candidate = device.getInterface(i);
+                if (candidate.getInterfaceClass() == UsbConstants.USB_CLASS_PRINTER &&
+                    findBulkEndpoint(candidate) != null) {
+                    conn.usbInterface = candidate;
+                    break;
+                }
+            }
+            if (conn.usbInterface == null) {
+                conn.connection.close();
+                return null;
+            }
             if (!conn.connection.claimInterface(conn.usbInterface, true)) {
                 Log.e(TAG, "Failed to claim USB interface");
                 conn.connection.close();
@@ -231,30 +249,19 @@ public class UsbConnectionManager {
      * 检查连接有效性
      */
     private boolean isConnectionValid(PrinterConnection conn) {
-        if (conn == null || !conn.isValid || conn.connection == null) {
-            return false;
-        }
-        
-        try {
-            // 发送测试数据包检查连接
-            byte[] testData = new byte[] { 0x1B, 0x40 }; // ESC @ 初始化命令
-            int result = conn.connection.bulkTransfer(conn.bulkEndpoint, testData, testData.length, 1000);
-            return result >= 0;
-        } catch (Exception e) {
-            Log.e(TAG, "Connection validation failed: " + e.getMessage());
-            return false;
-        }
+        // 原始字节通道不能额外注入 ESC/POS 指令，实际写入失败时再标记连接失效。
+        return conn != null && conn.isValid && conn.connection != null;
     }
     
     /**
      * 优化的打印执行方法 - 添加队列满异常处理
      */
-    public void submitPrintExecutor(UsbDevice device, List<List<Integer>> batches) {
+    public void submitPrintExecutor(UsbDevice device, List<List<Integer>> batches, Result result) {
         try {
             printExecutor.submit(() -> {
                 PrinterConnection conn = getOrCreateConnection(device);
                 if (conn == null || !conn.isValid) {
-                    Log.e(TAG, "Failed to establish printer connection");
+                    mainHandler.post(() -> result.error("USB_CONNECT_FAILED", "Failed to establish printer connection", null));
                     return;
                 }
                 
@@ -262,37 +269,36 @@ public class UsbConnectionManager {
                     long startTime = System.currentTimeMillis();
                     int totalBytes = 0;
                     
-                    for (List<Integer> batch : batches) {
-                        byte[] data = convertToByteArray(batch);
-                        totalBytes += data.length;
-                        
-                        int result = conn.connection.bulkTransfer(conn.bulkEndpoint, data, data.length, 5000);
-                        if (result < 0) {
-                            Log.e(TAG, "Bulk transfer failed, result: " + result);
-                            // 传输失败，标记连接无效
-                            conn.isValid = false;
-                            break;
+                    synchronized (conn) {
+                        if (!conn.isValid) throw new IllegalStateException("USB connection is closed");
+                        for (List<Integer> batch : batches) {
+                            byte[] data = convertToByteArray(batch);
+                            int offset = 0;
+                            while (offset < data.length) {
+                                int written = conn.connection.bulkTransfer(conn.bulkEndpoint, data, offset, data.length - offset, 5000);
+                                if (written <= 0) {
+                                    throw new IllegalStateException("USB bulk transfer failed: " + written);
+                                }
+                                offset += written;
+                                totalBytes += written;
+                            }
                         }
-                        
-                        // 减小延迟，根据打印机性能调整
-                        try {
-                            Thread.sleep(2);
-                        } catch (InterruptedException e) {
-                            break;
-                        }
+                        conn.lastUsed = System.currentTimeMillis();
                     }
                     
-                    conn.lastUsed = System.currentTimeMillis();
                     long endTime = System.currentTimeMillis();
                     Log.d(TAG, "Print completed: " + totalBytes + " bytes in " + (endTime - startTime) + "ms");
+                    mainHandler.post(() -> result.success(true));
                     
                 } catch (Exception e) {
                     Log.e(TAG, "Error printing: " + e.getMessage());
                     conn.isValid = false; // 出错时标记连接无效
+                    mainHandler.post(() -> result.error("USB_PRINT_FAILED", e.getMessage(), null));
                 }
             });
         } catch (Exception e) {
             Log.w(TAG, "Print task rejected, queue is full: " + e.getMessage());
+            mainHandler.post(() -> result.error("USB_QUEUE_FULL", e.getMessage(), null));
         }
     }
     
